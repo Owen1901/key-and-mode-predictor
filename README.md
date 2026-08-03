@@ -61,3 +61,21 @@ returns the progression that maximizes the product
 
 This is essentially a music‑theory optimization problem powered by Bayesian inference.
 
+How it works (simple explanation)
+
+Even though the code is mathematically detailed, the core idea is intuitive:
+
+Each mode has a probability table  
+(from HookTheory’s chord‑usage data)
+
+Each chord you enter updates the likelihood  
+The model checks how well each chord fits each mode.
+
+Bayesian inference combines the evidence  
+The posterior probability of each key/mode is updated.
+
+The highest‑probability key/mode wins  
+You get a ranked list of all 84 possibilities.
+
+This is similar to how language models score sentences — except here, the “language” is harmony.
+
