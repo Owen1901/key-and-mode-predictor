@@ -1,0 +1,973 @@
+from statistics import mode
+import matplotlib.pyplot as plt
+import colorsys
+
+PITCHES = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"]
+QUALITIES = ["major", "minor", "dominant7", "major7", "minor7", "dominant9", "major9", "minor9", "add9", "madd9"]
+pitch_to_index = {p:i for i,p in enumerate(PITCHES)}
+
+LYDIAN_PROBS = {
+    "I": 0.22, "Imaj7": 0.06, "II": 0.11, "iii": 0.05, "V": 0.07, "vi": 0.03, "vii": 0.03,
+
+    # Non-diatonic chords
+    "i": 0.004, "bII": 0.003, "bIII": 0.007, "III": 0.01, "bIV": 0.01, "IV": 0.005,
+    "bVI": 0.007, "bVII": 0.003,
+
+    "Vmaj7": 0.01, "bVImaj7": 0.002,
+
+    "iii7": 0.01, "vi7": 0.01, "vii7": 0.02,
+
+    "I7": 0.003, "II7": 0.009, "V7": 0.003, 
+
+    "Imaj9": 0.02,
+
+    "iii9": 0.004,
+
+    "II9": 0.003,
+
+    "Iadd9": 0.01, "IIadd9": 0.006,
+
+    "iiiadd9": 0.003,
+
+    "Other": 0.0005
+}
+
+MAJOR_PROBS = {
+    "I": 0.18, "Imaj7": 0.02, "ii": 0.03, "iii": 0.03, "IV": 0.12, "IVmaj7": 0.02, "V": 0.12,
+    "vi": 0.07,
+
+    # Non-diatonic chords
+    "iv": 0.006, "v": 0.001,
+    
+    "II": 0.007, "bIII": 0.004, "III": 0.007, "VI": 0.004,
+    "bVI": 0.005, "bVImaj7": 0.002, "bVII": 0.01, "bVIImaj7": 0.001, "VII": 0.001,
+
+    "ii7": 0.03, "iii7": 0.02, "iv7": 0.001, "v7": 0.002, "vi7": 0.02,
+
+    "I7": 0.005, "II7": 0.005, "III7": 0.006,
+    "IV7": 0.001, "V7": 0.002, "VI7": 0.004, 
+
+    "Imaj9": 0.003, "IVmaj9": 0.003, 
+
+    "ii9": 0.003, "vi9": 0.001,
+
+    "V9": 0.001,
+
+    "Iadd9": 0.005, "IVadd9": 0.007, "Vadd9": 0.002,
+
+    "IV^6_4": 0.007, "vi^6": 0.003, "ii^4_2": 0.002,
+    
+    "V^6_4": 0.004, "V^4_3": 0.002,
+
+    "I^6": 0.02, "vi^6_4": 0.002, "I^6_5": 0.001,
+
+    "V^4_2": 0.003, "ii^6": 0.002,
+
+    "V^6/V": 0.001,
+
+    "vi^4_2": 0.003, "iii^6_5": 0.003, "I^6_4": 0.01, "V^11": 0.005,
+
+    "V^6/vi": 0.001, "V^6_5/vi": 0.001, "iv^6": 0.001,
+
+    "ii^6_4": 0.001, "IV^6": 0.005,
+
+    "V^6": 0.01, "V^6_5": 0.001, "iii^6_4": 0.003, "I^4_2": 0.003,
+
+    "Other": 0.0005
+}
+
+MIXOLYDIAN_PROBS = {
+    "I": 0.26, "ii": 0.02, "bIII": 0.03, "IV": 0.11, "v": 0.03, "VII": 0.14,
+
+    # Borrowed / chromatic
+    "i": 0.002, "bII": 0.003, "II": 0.005, "iii": 0.001, "iv": 0.005,
+    "bV": 0.002, "V": 0.02, "bVI": 0.02, "vi": 0.02, "bI": 0.001,
+
+    "Imaj7": 0.002, "bIIImaj7": 0.003, "IVmaj7": 0.006, "bVImaj7": 0.004, "VIImaj7": 0.006,
+
+    "i7": 0.002, "ii7": 0.007, "iv7": 0.001, "v7": 0.01, "vi7": 0.008,
+
+    "I7": 0.03, "II7": 0.002, "IV7": 0.006, "V7": 0.004, "VII7": 0.002,
+
+    "VIImaj9": 0.002,
+
+    "I9": 0.003,
+
+    "Iadd9": 0.006, "IVadd9": 0.004, "VIIadd9": 0.009,
+
+    "I^11": 0.01,
+
+    "IV^6_4": 0.01, "iv^6_4": 0.002, "vi^6": 0.002, "ii^4_2": 0.003,
+
+    "v^6_4": 0.001, "VII^6": 0.004,
+
+    "I^6": 0.01, "I^6_5": 0.001,
+
+    "ii^6": 0.002, "VII^6_4": 0.007,
+
+    "I^6_4": 0.02, "I^4_3": 0.002,
+
+    "iv^6": 0.002,
+    
+    "IV^6": 0.01,
+
+    "I^4_2": 0.01, "v^6": 0.002, "IV^6_4/VII": 0.002,
+
+    "Other": 0.0005
+}
+
+DORIAN_PROBS = {
+    "i": 0.19, "ii": 0.02, "III": 0.09, "IIImaj7": 0.009, "IV": 0.12,
+    "v": 0.04, "VII": 0.08, "VIImaj7": 0.005,
+
+    # Borrowed / chromatic
+    "I": 0.02, "bII": 0.003, "II": 0.004, "iv": 0.002,
+    "bV": 0.003, "V": 0.01, "bVI": 0.02, "bVImaj7": 0.005, "vi": 0.001,
+
+    "i7": 0.06, "ii7": 0.01, "iv7": 0.001, "v7": 0.01,
+
+    "I7": 0.003, "II7": 0.001, "IV7": 0.02, "V7": 0.005, "VII7": 0.001,
+
+    "IIImaj9": 0.001, "VIImaj9": 0.001,
+
+    "i9": 0.01, "v9": 0.002,
+
+    "IV9": 0.004,
+
+    "IIIadd9": 0.002, "IVadd9": 0.004, "VIIadd9": 0.004, 
+
+    "iadd9": 0.004,
+
+    "IV^6_4": 0.01, "ii^4_2": 0.005, "IV^4_3": 0.002,
+
+    "VII^6": 0.007, "v^6_4": 0.002,
+
+    "i^6": 0.01, "IV^4_2": 0.003,
+
+    "ii^6": 0.004, "VII^6_4": 0.003,
+
+    "IV11": 0.002,
+
+    "i^6_4": 0.01, "i^4_3": 0.002, "III^6": 0.003,
+
+    "IV^6": 0.009, "ii^6_4": 0.001,
+
+    "v^6": 0.003, "III^6_4": 0.005, "i^4_2": 0.008,
+
+    "Other": 0.0005
+}
+
+MINOR_PROBS = {
+    "i": 0.18, "III": 0.06, "IIImaj7": 0.005, "iv": 0.05, "v": 0.04,
+    "VI": 0.10, "VImaj7": 0.03, "VII": 0.10,
+
+    # Non-diatonic chords
+    "I": 0.01, "ii": 0.002, "IV": 0.01, "V": 0.03, "vii": 0.001,
+
+    "bII": 0.005, "bIImaj7": 0.002, "II": 0.002, "bV": 0.002, "#vi": 0.001,
+
+    "i7": 0.03, "iv7": 0.02, "v7": 0.02, "vii7": 0.002,
+
+    "I7": 0.002, "II7": 0.001, "IV7": 0.002, "V7": 0.01, "VI7": 0.001, "VII7": 0.005,
+
+    "VImaj9": 0.003, 
+
+    "i9": 0.005, "iv9": 0.004,
+
+    "IIIadd9": 0.001, "VIadd9": 0.004, "VIIadd9": 0.003,
+
+    "iadd9": 0.004, "ivadd9": 0.001,
+
+    "VI^6": 0.004, "iv^6_4": 0.003, "VI^6_5": 0.002,
+
+    "VII^6": 0.007, "V^6_4": 0.002, "v^6_4": 0.003,
+
+    "VI^6_4": 0.003, "i^6": 0.01,
+
+    "VII^6_4": 0.003,
+
+    "i^6_4": 0.01, "III^6": 0.006, "VI^4_2": 0.001,
+
+    "VII^4_2": 0.002, "iv^6": 0.004,
+
+    "IV^6": 0.003,
+
+    "i^4_2": 0.005, "v^6": 0.005, "III^6_4": 0.006, "VII^11": 0.001,
+
+    "V^6": 0.006, "V^6_5": 0.002,
+    
+    "Other": 0.0005
+}
+
+def parse_chord(ch):
+    ch = ch.strip()
+    
+    # longest suffixes first
+    if ch.endswith("maj7"):
+        return ch[:-4], "major7"
+    elif ch.endswith("m7"):
+        return ch[:-2], "minor7"
+    elif ch.endswith("7"):
+        return ch[:-1], "dominant7"
+    elif ch.endswith("maj9"):
+        return ch[:-4], "major9"
+    elif ch.endswith("m9"):
+        return ch[:-2], "minor9"
+    elif ch.endswith("madd9"):
+        return ch[:-5], "madd9"
+    elif ch.endswith("add9"):
+        return ch[:-4], "add9"
+    elif ch.endswith("9"):
+        return ch[:-1], "dominant9"
+    if ch.endswith("m"):
+        return ch[:-1], "minor"
+    else:
+        return ch, "major"
+    
+def parse_full_chord(ch):
+    """
+    Generalized parser that supports slash chords like Dm/C or C/E.
+    Returns (root, quality, bass).
+    """
+
+    ch = ch.strip()
+
+    # 1. Detect slash chords
+    if "/" in ch:
+        upper, bass = ch.split("/", 1)
+        upper = upper.strip()
+        bass = bass.strip()
+    else:
+        upper, bass = ch, None
+
+    # 2. Parse the upper chord using your existing logic
+    root, quality = parse_chord(upper)
+
+    return root, quality, bass
+
+def interval(a, b):
+    return (pitch_to_index[b] - pitch_to_index[a]) % 12
+
+def degree_name(interval, upper_interval, bass_interval, quality, mode):
+
+    if mode == "lydian":
+        if interval == 0 and quality == "major": return "I"
+        if interval == 0 and quality == "major7": return "Imaj7"
+        if interval == 2 and quality == "major": return "II"
+        if interval == 4 and quality == "minor": return "iii"
+        if interval == 7 and quality == "major": return "V"
+        if interval == 7 and quality == "major7": return "Vmaj7"
+        if interval == 9 and quality == "minor": return "vi"
+        if interval == 11 and quality == "minor": return "vii"
+
+        # Non-diatonic chords
+        if interval == 0 and quality == "minor": return "i"
+        if interval == 1 and quality == "major": return "bII"
+        if interval == 3 and quality == "major": return "bIII"
+        if interval == 5 and quality == "major": return "bIV"
+        if interval == 6 and quality == "major": return "IV"
+        if interval == 8 and quality == "major": return "bVI"
+        if interval == 8 and quality == "major7": return "bVImaj7"
+        if interval == 10 and quality == "major": return "bVII"
+
+        if interval == 4 and quality == "minor7": return "iii7"
+        if interval == 9 and quality == "minor7": return "vi7"
+        if interval == 11 and quality == "minor7": return "vii7"
+
+        if interval == 0 and quality == "dominant7": return "I7"
+        if interval == 2 and quality == "dominant7": return "II7"
+        if interval == 7 and quality == "dominant7": return "V7"
+
+        if interval == 0 and quality == "major9": return "Imaj9"
+
+        if interval == 4 and quality == "minor9": return "iii9"
+
+        if interval == 2 and quality == "dominant9": return "II9"
+
+        if interval == 0 and quality == "add9": return "Iadd9"
+        if interval == 2 and quality == "add9": return "IIadd9"
+        if interval == 4 and quality == "madd9": return "iiiadd9"
+        return "Other"
+    
+    # Major mode degrees
+    if mode == "major":
+        if interval == 0 and quality == "major": return "I"
+        if interval == 0 and quality == "major7": return "Imaj7"
+        if interval == 2 and quality == "minor": return "ii"
+        if interval == 4 and quality == "minor": return "iii"
+        if interval == 5 and quality == "major": return "IV"
+        if interval == 5 and quality == "major7": return "IVmaj7"
+        if interval == 7 and quality == "major": return "V"
+        if interval == 9 and quality == "minor": return "vi"
+
+        # Non-diatonic chords
+        if interval == 5 and quality == "minor": return "iv"
+        if interval == 7 and quality == "minor": return "v"
+
+        if interval == 2 and quality == "major": return "II"
+        if interval == 4 and quality == "major": return "III"
+        if interval == 3 and quality == "major": return "bIII"
+        if interval == 8 and quality == "major": return "bVI"
+        if interval == 8 and quality == "major7": return "bVImaj7"
+        if interval == 9 and quality == "major": return "VI"
+        if interval == 10 and quality == "major": return "bVII"
+        if interval == 10 and quality == "major7": return "bVIImaj7"
+        if interval == 11 and quality == "major": return "VII"
+
+        if interval == 2 and quality == "minor7": return "ii7"
+        if interval == 4 and quality == "minor7": return "iii7"
+        if interval == 5 and quality == "minor7": return "iv7"
+        if interval == 7 and quality == "minor7": return "v7"
+        if interval == 9 and quality == "minor7": return "vi7"
+
+        if interval == 0 and quality == "dominant7": return "I"
+        if interval == 2 and quality == "dominant7": return "II7"
+        if interval == 4 and quality == "dominant7": return "III7"
+        if interval == 5 and quality == "dominant7": return "IV7"
+        if interval == 7 and quality == "dominant7": return "V7"
+        if interval == 9 and quality == "dominant7": return "VI7"
+
+        if interval == 0 and quality == "major9": return "Imaj9"
+        if interval == 5 and quality == "major9": return "IVmaj9"
+
+        if interval == 2 and quality == "minor9": return "ii9"
+        if interval == 9 and quality == "minor9": return "vi9"
+
+        if interval == 7 and quality == "dominant9": return "V9"
+
+        if interval == 0 and quality == "add9": return "Iadd9"
+        if interval == 5 and quality == "add9": return "IVadd9"
+        if interval == 7 and quality == "add9": return "Vadd9"
+
+        if upper_interval == 5 and bass_interval == 0 and quality == "major": return "IV^6_4"
+        if upper_interval == 9 and bass_interval == 0 and quality == "minor": return "vi^6"
+        if upper_interval == 2 and bass_interval == 0 and quality == "minor": return "ii^4_2"
+        if upper_interval == 7 and bass_interval == 2 and quality == "major": return "V^6_4"
+        if upper_interval == 7 and bass_interval == 2 and quality == "dominant7": return "V^4_3"
+        if upper_interval == 0 and bass_interval == 4 and quality == "major": return "I^6"
+        if upper_interval == 9 and bass_interval == 4 and quality == "minor": return "vi^6_4"
+        if upper_interval == 0 and bass_interval == 4 and quality == "major7": return "I^6_5"
+
+        if upper_interval == 7 and bass_interval == 5 and quality == "dominant7": return "V^4_2"
+        if upper_interval == 2 and bass_interval == 5 and quality == "minor": return "ii^6"
+
+        if upper_interval == 2 and bass_interval == 5 and quality == "minor": return"V^6/V"
+
+        if upper_interval == 9 and bass_interval == 7 and quality == "minor": return "vi^4_2"
+        if upper_interval == 4 and bass_interval == 7 and quality == "minor": return "iii^6_5"
+        if upper_interval == 0 and bass_interval == 7 and quality == "major": return "I^6_4"
+        if upper_interval == 5 and bass_interval == 7 and quality == "major": return "V^11"
+
+        if upper_interval == 2 and bass_interval == 9 and quality == "minor": return "ii^6_4"
+        if upper_interval == 5 and bass_interval == 9 and quality == "major": return "IV^6"
+
+        if upper_interval == 4 and bass_interval == 10 and quality == "major": return "V^6/vi"
+        if upper_interval == 4 and bass_interval == 10 and quality == "dominant7": return "V^6_5/vi"
+        if upper_interval == 5 and bass_interval == 10 and quality == "minor": return "iv^6"
+
+        if upper_interval == 7 and bass_interval == 11 and quality == "major": return "V^6"
+        if upper_interval == 4 and bass_interval == 11 and quality == "minor": return "iii^6_4"
+        if upper_interval == 0 and bass_interval == 11 and quality == "major": return "I^4_2"
+        if upper_interval == 7 and bass_interval == 11 and quality == "dominant7": return "V^6_5"
+        return "Other"
+
+    if mode == "mixolydian":
+        if interval == 0 and quality == "major": return "I"
+        if interval == 0 and quality == "major7": return "Imaj7"
+        if interval == 2 and quality == "minor": return "ii"
+        if interval == 3 and quality == "major": return "bIII"
+        if interval == 3 and quality == "major7": return "bIIImaj7"
+        if interval == 4 and quality == "minor": return "iii"
+        if interval == 5 and quality == "major": return "IV"
+        if interval == 5 and quality == "major7": return "IVmaj7"
+        if interval == 7 and quality == "minor": return "v"
+        if interval == 10 and quality == "major": return "VII"
+        if interval == 10 and quality == "major7": return "VIImaj7"
+
+        # Non-diatonic chords
+        if interval == 0 and quality == "minor": return "i"
+        if interval == 1 and quality == "major": return "bII"
+        if interval == 2 and quality == "major": return "II"
+        if interval == 5 and quality == "minor": return "iv"
+        if interval == 6 and quality == "major": return "bV"
+        if interval == 7 and quality == "major": return "V"
+        if interval == 8 and quality == "major": return "bVI"
+        if interval == 8 and quality == "major7": return "bVImaj7"
+        if interval == 9 and quality == "minor": return "vi"
+        if interval == 11 and quality == "major": return "bI"
+
+        if interval == 0 and quality == "minor7": return "i7"
+        if interval == 2 and quality == "minor7": return "ii7"
+        if interval == 5 and quality == "minor7": return "iv7"
+        if interval == 7 and quality == "minor7": return "v7"
+        if interval == 9 and quality == "minor7": return "vi7"
+
+        if interval == 0 and quality == "dominant7": return "I7"
+        if interval == 2 and quality == "dominant7": return "II7"
+        if interval == 5 and quality == "dominant7": return "IV7"
+        if interval == 7 and quality == "dominant7": return "V7"
+        if interval == 10 and quality == "dominant7": return "VII7"
+
+        if interval == 10 and quality == "major9": return "VIImaj9"
+
+        if interval == 0 and quality == "dominant9": return "I9"
+
+        if interval == 0 and quality == "add9": return "Iadd9"
+        if interval == 5 and quality == "add9": return "IVadd9"
+        if interval == 10 and quality == "add9": return "VIIadd9"
+
+        if interval == 0 and quality == "major11": return "I^11"
+
+        if upper_interval == 5 and bass_interval == 0 and quality == "major": return "IV^6_4"
+        if upper_interval == 5 and bass_interval == 0 and quality == "minor": return "iv^6_4"
+        if upper_interval == 9 and bass_interval == 0 and quality == "minor": return "vi^6"
+        if upper_interval == 2 and bass_interval == 0 and quality == "minor": return "ii^4_2"
+        
+        if upper_interval == 7 and bass_interval == 2 and quality == "minor": return "v^6_4"
+        if upper_interval == 10 and bass_interval == 2 and quality == "major": return "VII^6"
+
+        if upper_interval == 0 and bass_interval == 4 and quality == "major": return "I^6"
+        if upper_interval == 0 and bass_interval == 4 and quality == "dominant7": return "I^6_5"
+
+        if upper_interval == 2 and bass_interval == 5 and quality == "minor": return "ii^6"
+        if upper_interval == 10 and bass_interval == 5 and quality == "major": return "VII^6_4"
+
+        if upper_interval == 0 and bass_interval == 7 and quality == "major": return "I^6_4"
+        if upper_interval == 0 and bass_interval == 7 and quality == "dominant7": return "I^4_3"
+
+        if upper_interval == 5 and bass_interval == 8 and quality == "minor": return "iv^6"
+
+        if upper_interval == 5 and bass_interval == 9 and quality == "major": return "IV^6"
+
+        if upper_interval == 0 and bass_interval == 10 and quality == "dominant7": return "I^4_2"
+        if upper_interval == 7 and bass_interval == 10 and quality == "minor": return "v^6"
+        if upper_interval == 3 and bass_interval == 10 and quality == "major": return "IV^6_4/VII"
+        return "Other"
+    
+    if mode == "dorian":
+        if interval == 0 and quality == "minor": return "i"
+        if interval == 2 and quality == "minor": return "ii"
+        if interval == 3 and quality == "major": return "III"
+        if interval == 3 and quality == "major7": return "IIImaj7"
+        if interval == 5 and quality == "major": return "IV"
+        if interval == 7 and quality == "minor": return "v"
+        if interval == 10 and quality == "major": return "VII"
+        if interval == 10 and quality == "major7": return "VIImaj7"
+
+        # Non-diatonic chords
+        if interval == 0 and quality == "major": return "I"
+        if interval == 1 and quality == "major": return "bII"
+        if interval == 2 and quality == "major": return "II"
+        if interval == 5 and quality == "minor": return "iv"
+        if interval == 6 and quality == "major": return "bV"
+        if interval == 7 and quality == "major": return "V"
+        if interval == 8 and quality == "major": return "bVI"
+        if interval == 8 and quality == "major7": return "bVImaj7"
+        if interval == 9 and quality == "minor": return "vi"
+
+        if interval == 0 and quality == "minor7": return "i7"
+        if interval == 2 and quality == "minor7": return "ii7"
+        if interval == 5 and quality == "minor7": return "iv7"
+        if interval == 7 and quality == "minor7": return "v7"
+
+        if interval == 0 and quality == "dominant7": return "I7"
+        if interval == 2 and quality == "dominant7": return "II7"
+        if interval == 5 and quality == "dominant7": return "IV7"
+        if interval == 7 and quality == "dominant7": return "V7"
+        if interval == 10 and quality == "dominant7": return "VII7"
+
+        if interval == 3 and quality == "major9": return "IIImaj9"
+        if interval == 10 and quality == "major9": return "VIImaj9"
+
+        if interval == 0 and quality == "minor9": return "i9"
+        if interval == 7 and quality == "minor9": return "v9"
+
+        if interval == 5 and quality == "dominant9": return "IV9"
+
+        if interval == 3 and quality == "add9": return "IIIadd9"
+        if interval == 5 and quality == "add9": return "IVadd9"
+        if interval == 10 and quality == "add9": return "VIIadd9"
+        if interval == 0 and quality == "madd9": return "iadd9"
+
+        if upper_interval == 5 and bass_interval == 0 and quality == "major": return "IV^6_4"
+        if upper_interval == 2 and bass_interval == 0 and quality == "minor": return "ii^4_2"
+        if upper_interval == 5 and bass_interval == 0 and quality == "dominant7": return "IV^4_3"
+
+        if upper_interval == 10 and bass_interval == 2 and quality == "major": return "VII^6"
+        if upper_interval == 7 and bass_interval == 2 and quality == "major": return "v^6_4"
+
+        if upper_interval == 0 and bass_interval == 3 and quality == "minor": return "i^6"
+        if upper_interval == 5 and bass_interval == 3 and quality == "dominant7": return "IV^4_2"
+
+        if upper_interval == 2 and bass_interval == 5 and quality == "minor": return "ii^6"
+        if upper_interval == 10 and bass_interval == 5 and quality == "major": return "VII^6_4"
+
+        if upper_interval == 3 and bass_interval == 5 and quality == "major11": return "IV11"
+
+        if upper_interval == 0 and bass_interval == 7 and quality == "minor": return "i^6_4"
+        if upper_interval == 0 and bass_interval == 7 and quality == "minor7": return "i^4_3"
+        if upper_interval == 3 and bass_interval == 7 and quality == "major": return "III^6"
+
+        if upper_interval == 5 and bass_interval == 9 and quality == "major": return "IV^6"
+        if upper_interval == 2 and bass_interval == 9 and quality == "minor": return "ii^6_4"
+
+        if upper_interval == 7 and bass_interval == 10 and quality == "minor": return "v^6"
+        if upper_interval == 3 and bass_interval == 10 and quality == "major": return "III^6_4"
+        if upper_interval == 0 and bass_interval == 10 and quality == "minor": return "i^4_2"
+        return "Other"
+
+    # Minor mode degrees
+    if mode == "minor":
+        if interval == 0 and quality == "minor": return "i"
+        if interval == 3 and quality == "major": return "III"
+        if interval == 3 and quality == "major7": return "IIImaj7"
+        if interval == 5 and quality == "minor": return "iv"
+        if interval == 7 and quality == "minor": return "v"
+        if interval == 8 and quality == "major": return "VI"
+        if interval == 8 and quality == "major7": return "VImaj7"
+        if interval == 10 and quality == "major": return "VII"
+
+        # Non-diatonic chords
+        if interval == 0 and quality == "major": return "I"
+        if interval == 2 and quality == "minor": return "ii"
+
+        if interval == 5 and quality == "major": return "IV"
+        if interval == 7 and quality == "major": return "V"
+        if interval == 10 and quality == "minor": return "vii"
+
+        if interval == 1 and quality == "major": return "bII"
+        if interval == 1 and quality == "major7": return "bIImaj7"
+        if interval == 6 and quality == "major": return "bV"
+        if interval == 2 and quality == "major": return "II"
+        if interval == 9 and quality == "minor": return "#vi"
+
+        if interval == 0 and quality == "minor7": return "i7"
+        if interval == 5 and quality == "minor7": return "iv7"
+        if interval == 7 and quality == "minor7": return "v7"
+        if interval == 10 and quality == "minor7": return "vii7"
+
+        if interval == 0 and quality == "dominant7": return "I7"
+        if interval == 2 and quality == "dominant7": return "II7"
+        if interval == 5 and quality == "dominant7": return "IV7"
+        if interval == 7 and quality == "dominant7": return "V7"
+        if interval == 8 and quality == "dominant7": return "VI7"
+        if interval == 10 and quality == "dominant7": return "VII7"
+
+        if interval == 8 and quality == "major9": return "VImaj9"
+
+        if interval == 0 and quality == "minor9": return "i9"
+        if interval == 5 and quality == "minor9": return "iv9"
+
+        if interval == 3 and quality == "add9": return "IIIadd9"
+        if interval == 8 and quality == "add9": return "VIadd9"
+        if interval == 10 and quality == "add9": return "VIIadd9"
+
+        if interval == 0 and quality == "madd9": return "iadd9"
+        if interval == 5 and quality == "madd9": return "ivadd9"
+
+        if upper_interval == 8 and bass_interval == 0 and quality == "major": return "VI^6"
+        if upper_interval == 5 and bass_interval == 0 and quality == "minor": return "iv^6_4"
+        if upper_interval == 8 and bass_interval == 0 and quality == "major7": return "VI^6_5"
+
+        if upper_interval == 10 and bass_interval == 2 and quality == "major": return "VII^6"
+        if upper_interval == 7 and bass_interval == 2 and quality == "major": return "V^6_4"
+        if upper_interval == 7 and bass_interval == 2 and quality == "minor": return "v^6_4"
+
+        if upper_interval == 8 and bass_interval == 3 and quality == "major": return "VI^6_4"
+        if upper_interval == 0 and bass_interval == 3 and quality == "minor": return "i^6"
+
+        if upper_interval == 10 and bass_interval == 5 and quality == "major": return "VII^6_4"
+
+        if upper_interval == 0 and bass_interval == 7 and quality == "minor": return "i^6_4"
+        if upper_interval == 3 and bass_interval == 7 and quality == "major": return "III^6"
+        if upper_interval == 8 and bass_interval == 7 and quality == "major": return "VI^4_2"
+
+        if upper_interval == 10 and bass_interval == 8 and quality == "dominant7": return "VII^4_2"
+        if upper_interval == 5 and bass_interval == 8 and quality == "minor": return "iv^6"
+
+        if upper_interval == 5 and bass_interval == 9 and quality == "major": return "IV^6"
+
+        if upper_interval == 0 and bass_interval == 10 and quality == "minor": return "i^4_2"
+        if upper_interval == 7 and bass_interval == 10 and quality == "minor": return "v^6"
+        if upper_interval == 3 and bass_interval == 10 and quality == "major": return "III^6_4"
+        if upper_interval == 8 and bass_interval == 10 and quality == "major": return "VII^11"
+
+        if upper_interval == 7 and bass_interval == 11 and quality == "major": return "V^6"
+        if upper_interval == 7 and bass_interval == 11 and quality == "dominant7": return "V^6_5"
+        return "Other"
+
+def main():
+    # Initialize scores
+    scores = {}
+    for p in PITCHES:
+        scores[p + " lydian"] = 1.0
+        scores[p + " major"] = 1.0
+        scores[p + " mixolydian"] = 1.0
+        scores[p + " dorian"] = 1.0
+        scores[p + " minor"] = 1.0
+
+    print("Enter chords like C, Fm, G#, D#m. Type 'end' to finish.\n")
+
+    while True:
+        user = input("Chord: ").strip()
+        if user.lower() == "end":
+            break
+
+        root, quality, bass = parse_full_chord(user)
+
+        print("Root:", root)
+        print("Quality:", quality)
+        print("Bass:", bass)
+
+        # Validate chord
+        if root not in PITCHES:
+            print("Invalid root.")
+            continue
+
+        if quality not in QUALITIES:
+            print("Invalid quality.")
+            continue
+
+        if bass is not None and bass not in PITCHES:
+            print("Invalid bass note.")
+            continue
+
+        for key in scores:
+            tonic, mode = key.split()
+            if bass == None:
+                iv = interval(tonic, root)
+                upper_interval = None
+                bass_interval = None
+            else:
+                iv = None  
+                upper_interval = interval(tonic, root)
+                bass_interval = interval(tonic, bass)
+
+            deg = degree_name(iv, upper_interval, bass_interval, quality, mode)
+
+            if mode == "lydian":
+                prob = LYDIAN_PROBS.get(deg, LYDIAN_PROBS["Other"])
+            elif mode == "major":
+                prob = MAJOR_PROBS.get(deg, MAJOR_PROBS["Other"])
+            elif mode == "mixolydian":
+                prob = MIXOLYDIAN_PROBS.get(deg, MIXOLYDIAN_PROBS["Other"])
+            elif mode == "dorian":
+                prob = DORIAN_PROBS.get(deg, DORIAN_PROBS["Other"])
+            elif mode == "minor":
+                prob = MINOR_PROBS.get(deg, MINOR_PROBS["Other"])
+            
+            scores[key] *= prob
+
+        # Print normalized probabilities
+
+                # -------------------------
+        # Per-mode sorted bar chart (12 * 5 bars)
+        # -------------------------
+        
+                # -------------------------
+        # Per-mode sorted bar chart (12 * 5 bars) + summed "major field" histogram (12 bars)
+        # Both plots use a 12-step hue wheel assigned in circle-of-fifths order starting at C.
+        # -------------------------
+        total = sum(scores.values())
+        probs = {k: scores[k] / total for k in scores}
+
+        # Sort per-mode from highest to lowest probability
+        items = sorted(probs.items(), key=lambda x: x[1], reverse=True)
+        labels = [k for k, _ in items]
+        values = [v for _, v in items]
+
+        # Standard chromatic order (for arithmetic)
+        standard_chromatic = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
+        standard_index = {t: i for i, t in enumerate(standard_chromatic)}
+
+        # Circle of fifths order starting at C (12 tonics)
+        cof = ["C", "G", "D", "A", "E", "B", "F#", "C#", "G#", "D#", "A#", "F"]
+        cof_index = {t: i for i, t in enumerate(cof)}
+
+        # Degree -> semitone offset in a major scale (degree 1..7)
+        degree_intervals = {1: 0, 2: 2, 3: 4, 4: 5, 5: 7, 6: 9, 7: 11}
+        mode_to_degree = {
+            "major": 1,
+            "dorian": 2,
+            "phrygian": 3,
+            "lydian": 4,
+            "mixolydian": 5,
+            "minor": 6,   # aeolian
+            "locrian": 7,
+        }
+
+        # Base red hex (C major and its relatives)
+        base_red_hex = "#FF0000"
+
+        # Helper: convert hex to RGB (0..1), and back from HSV to hex
+        def hex_to_rgb01(hx: str):
+            hx = hx.lstrip("#")
+            r = int(hx[0:2], 16) / 255.0
+            g = int(hx[2:4], 16) / 255.0
+            b = int(hx[4:6], 16) / 255.0
+            return (r, g, b)
+
+        def rgb01_to_hex(rgb):
+            r, g, b = rgb
+            return "#{:02x}{:02x}{:02x}".format(int(round(r * 255)), int(round(g * 255)), int(round(b * 255)))
+
+        # Determine base hue from the provided base red hex
+        base_rgb = hex_to_rgb01(base_red_hex)
+        base_h, base_s, base_v = colorsys.rgb_to_hsv(*base_rgb)
+
+        # Step around the color wheel: 1/12 of full circle per semitone-step on our 12-part wheel
+        step = 1.0 / 12.0
+
+        # Build a mapping from standard tonic -> color, but assign hues according to circle-of-fifths order
+        parent_color = {}
+        for i, tonic in enumerate(cof):
+            hue = (base_h + step * i) % 1.0
+            rgb = colorsys.hsv_to_rgb(hue, base_s, base_v)
+            parent_color[tonic] = rgb01_to_hex(rgb)
+        # Ensure every standard chromatic name has a color (cof covers all 12 names)
+        # Fallback color (shouldn't be used)
+        default_color = "#888888"
+
+        # Function to compute the parent major tonic for a given "Tonic mode" label
+        def parent_major_of(label):
+            # label format: "Tonic mode" e.g., "C major" or "C# minor"
+            parts = label.split()
+            if len(parts) < 2:
+                return None
+            tonic = parts[0]
+            mode = parts[1]
+            mode_key = "minor" if mode == "minor" else mode
+            if tonic not in standard_index or mode_key not in mode_to_degree:
+                return None
+            degree = mode_to_degree[mode_key]
+            semitone_offset = degree_intervals[degree]
+            parent_idx = (standard_index[tonic] - semitone_offset) % 12
+            return standard_chromatic[parent_idx]
+
+        # Map each per-mode label to the parent-major color (using circle-of-fifths assignment)
+        per_mode_colors = []
+        for lab in labels:
+            parent = parent_major_of(lab)
+            if parent is None:
+                per_mode_colors.append(default_color)
+            else:
+                # parent is a standard chromatic name like "A" or "C#"
+                # find its color via the cof->color mapping: parent may appear in cof list
+                # if parent is not in cof (shouldn't happen), fallback to default
+                per_mode_colors.append(parent_color.get(parent, default_color))
+
+        # Create figure sized to number of bars (per-mode)
+        fig1, ax1 = plt.subplots(figsize=(max(10, len(labels) * 0.35), 6))
+
+        # Vertical bars ordered by probability
+        ax1.bar(range(len(labels)), values, color=per_mode_colors)
+
+        # Axes and formatting
+        ax1.set_ylim(0, 1)
+        ax1.set_ylabel("Probability")
+        ax1.set_xlabel("Key and Scale")
+        ax1.set_xticks(range(len(labels)))
+        ax1.set_xticklabels(labels, rotation=90, fontsize=7)
+        ax1.set_yticks([i / 10 for i in range(0, 11)])
+        ax1.grid(axis="y", linestyle="--", alpha=0.3)
+
+        # Compact legend: one entry per parent major (12 tonics) in circle-of-fifths order
+        from matplotlib.patches import Patch
+        legend_patches = [Patch(color=parent_color[t], label=t) for t in cof]
+        ax1.legend(handles=legend_patches, title="Parent Major (CoF order)", bbox_to_anchor=(1.02, 1), loc="upper left", fontsize=8, title_fontsize=9)
+
+        # -------------------------
+        # Second plot: summed "major field" histogram (12 bars)
+        # -------------------------
+        # Sum probabilities by parent major (reuse probs and parent_major_of)
+        parent_sums = {t: 0.0 for t in standard_chromatic}
+        for label, p in probs.items():
+            parent = parent_major_of(label)
+            if parent is None:
+                continue
+            parent_sums[parent] += p
+
+        # Prepare sorted data (highest -> lowest)
+        parent_items = sorted(parent_sums.items(), key=lambda x: x[1], reverse=True)
+        parent_labels = [f"{t} major field" for t, _ in parent_items]
+        parent_values = [v for _, v in parent_items]
+        # Colors for parent bars: use the same parent_color mapping (circle-of-fifths assignment)
+        parent_colors = [parent_color.get(t, default_color) for t, _ in parent_items]
+
+        # Plot the 12-bar parent-major histogram
+        fig2, ax2 = plt.subplots(figsize=(max(8, len(parent_labels) * 0.6), 5))
+        ax2.bar(range(len(parent_labels)), parent_values, color=parent_colors)
+        ax2.set_ylim(0, 1)
+        ax2.set_ylabel("Fraction of the progression's color")
+        ax2.set_xlabel("Major Field")
+        ax2.set_xticks(range(len(parent_labels)))
+        ax2.set_xticklabels(parent_labels, rotation=90, fontsize=8)
+        ax2.set_yticks([i / 10 for i in range(0, 11)])
+        ax2.grid(axis="y", linestyle="--", alpha=0.3)
+
+        # Optional compact legend (one patch per tonic in circle-of-fifths order)
+        legend_patches2 = [Patch(color=parent_color[t], label=f"{t} major") for t in cof]
+        ax2.legend(handles=legend_patches2, title="Parent Major (CoF order)", bbox_to_anchor=(1.02, 1), loc="upper left", fontsize=8, title_fontsize=9)
+
+        plt.tight_layout()
+        # Show both figures at once
+        
+
+
+
+
+
+
+                # -------------------------
+        # Third plot: negative log-loss per-mode (12 * 5 bars)
+        # -------------------------
+        import math
+
+        # Compute -ln(p) for each per-mode probability
+        neglog_values = []
+        for v in values:
+            if v <= 0:
+                neglog_values.append(0.0)
+            else:
+                neglog_values.append(-math.log(v))
+
+        fig3, ax3 = plt.subplots(figsize=(max(10, len(labels) * 0.35), 6))
+        ax3.bar(range(len(labels)), neglog_values, color=per_mode_colors)
+
+        ax3.set_ylabel("Negative Log Loss")
+        ax3.set_xlabel("Key and Scale")
+        ax3.set_xticks(range(len(labels)))
+        ax3.set_xticklabels(labels, rotation=90, fontsize=7)
+        ax3.grid(axis="y", linestyle="--", alpha=0.3)
+
+        # Legend (same as before)
+        legend_patches3 = [Patch(color=parent_color[t], label=t) for t in cof]
+        ax3.legend(handles=legend_patches3, title="Parent Major (CoF order)",
+                   bbox_to_anchor=(1.02, 1), loc="upper left",
+                   fontsize=8, title_fontsize=9)
+
+        plt.tight_layout()
+
+
+        # -------------------------
+        # Fourth plot: negative log-loss major-field histogram (12 bars)
+        # -------------------------
+        neglog_parent_values = []
+        for v in parent_values:
+            if v <= 0:
+                neglog_parent_values.append(0.0)
+            else:
+                neglog_parent_values.append(-math.log(v))
+
+        fig4, ax4 = plt.subplots(figsize=(max(8, len(parent_labels) * 0.6), 5))
+        ax4.bar(range(len(parent_labels)), neglog_parent_values,
+                color=parent_colors)
+
+        ax4.set_ylabel("Negative Log Loss")
+        ax4.set_xlabel("Major Field")
+        ax4.set_xticks(range(len(parent_labels)))
+        ax4.set_xticklabels(parent_labels, rotation=90, fontsize=8)
+        ax4.grid(axis="y", linestyle="--", alpha=0.3)
+
+        legend_patches4 = [Patch(color=parent_color[t], label=f"{t} major") for t in cof]
+        ax4.legend(handles=legend_patches4, title="Parent Major (CoF order)",
+                   bbox_to_anchor=(1.02, 1), loc="upper left",
+                   fontsize=8, title_fontsize=9)
+
+        plt.tight_layout()
+
+
+
+
+
+        
+
+
+
+
+        ####################
+
+
+
+                # -------------------------
+        # Fifth plot: "field dominance rank-pressure" histogram (12 bars)
+        # -------------------------
+        # We already have:
+        #   labels          = list of "Tonic mode" sorted by probability (length 60)
+        #   parent_major_of = function mapping each label to its parent major
+        #   cof             = circle-of-fifths tonic order (length 12)
+        #   parent_color    = mapping tonic -> hex color
+
+        # # Build a list of parent majors for each of the 60 sorted labels
+        # parent_of_label = [parent_major_of(lab) for lab in labels]
+
+        # # For each major field, compute the rank-pressure score
+        # field_scores = {t: 0 for t in cof}
+
+        # # For each field, look at its 5 modes in the 60-mode ranking
+        # for field in cof:
+        #     # Indices of the 5 modes belonging to this field
+        #     indices = [i for i, p in enumerate(parent_of_label) if p == field]
+
+        #     score = 0
+        #     for idx in indices:
+        #         # Count how many modes AFTER idx belong to a DIFFERENT field
+        #         for j in range(idx + 1, len(parent_of_label)):
+        #             if parent_of_label[j] != field:
+        #                 score += 1
+
+        #     field_scores[field] = score
+
+        # # Sort fields by score (highest -> lowest)
+        # sorted_fields = sorted(field_scores.items(), key=lambda x: x[1], reverse=True)
+        # field_labels = [f"{t} major field" for t, _ in sorted_fields]
+        # field_values = [v for _, v in sorted_fields]
+        # field_colors = [parent_color[t] for t, _ in sorted_fields]
+
+        # # Plot the rank-pressure histogram
+        # fig5, ax5 = plt.subplots(figsize=(max(8, len(field_labels) * 0.6), 5))
+        # ax5.bar(range(len(field_labels)), field_values, color=field_colors)
+
+        # ax5.set_ylabel("Rank-Pressure Score")
+        # ax5.set_xlabel("Major Field")
+        # ax5.set_xticks(range(len(field_labels)))
+        # ax5.set_xticklabels(field_labels, rotation=90, fontsize=8)
+        # ax5.grid(axis="y", linestyle="--", alpha=0.3)
+
+        # # Legend (circle-of-fifths order)
+        # legend_patches5 = [Patch(color=parent_color[t], label=f"{t} major") for t in cof]
+        # ax5.legend(handles=legend_patches5, title="Parent Major (CoF order)",
+        #            bbox_to_anchor=(1.02, 1), loc="upper left",
+        #            fontsize=8, title_fontsize=9)
+
+        # plt.tight_layout()
+
+
+
+
+        # Also print the numeric probabilities to the console for reference
+        #print("\nProbabilities:")
+        #for k, v in items:
+        #    print(f"{k}: {v:.4f}")
+        #print()
+
+
+        plt.show()
+
+        # Also print the numeric probabilities to the console for reference
+        print("\nProbabilities:")
+        for k, v in items:
+            print(f"{k}: {v:.6f}")
+        print()
+
+
+    # Final result
+    total = sum(scores.values())
+    final_probs = {k: scores[k]/total for k in scores}
+    best = max(final_probs, key=final_probs.get)
+
+    print("\nMost likely key:", best)
+    print("Probability:", final_probs[best])
+
+if __name__ == "__main__":
+    main()
